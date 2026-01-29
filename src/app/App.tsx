@@ -126,11 +126,29 @@ export default function App() {
       // Start audit session on backend
       const { audit_id } = await api.startAudit();
 
-      // Start audit with the received ID
-      startAudit(null, null, true, audit_id);
+      // Fetch sample PDF files from public folder
+      const billResponse = await fetch('/samples/sample_hospital_bill.pdf');
+      const policyResponse = await fetch('/samples/sample_insurance_policy.pdf');
+
+      if (!billResponse.ok || !policyResponse.ok) {
+        throw new Error('Failed to load sample documents');
+      }
+
+      // Convert to File objects
+      const billBlob = await billResponse.blob();
+      const policyBlob = await policyResponse.blob();
+
+      const billFile = new File([billBlob], 'sample_hospital_bill.pdf', { type: 'application/pdf' });
+      const policyFile = new File([policyBlob], 'sample_insurance_policy.pdf', { type: 'application/pdf' });
+
+      // Upload sample files to backend
+      await api.uploadDocuments(audit_id, billFile, policyFile);
+
+      // Start audit with the received ID and uploaded files
+      startAudit(billFile, policyFile, true, audit_id);
     } catch (err) {
       console.error('Failed to start sample audit:', err);
-      alert('Failed to connect to backend. Please ensure the server is running.');
+      alert('Failed to start sample audit: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
