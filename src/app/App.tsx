@@ -121,7 +121,7 @@ export default function App() {
   const handleSampleAudit = async () => {
     try {
       // Import api
-      const { api } = await import('@/app/services/api');
+      const { api } = await import('@/services/api');
 
       // Start audit session on backend
       const { audit_id } = await api.startAudit();

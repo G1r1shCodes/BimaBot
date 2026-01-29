@@ -118,3 +118,12 @@ export async function getAuditResult(auditId: string): Promise<AuditResult> {
 
     return response.json();
 }
+
+// Unified API object export for components that prefer object syntax
+export const api = {
+    startAudit,
+    uploadDocuments,
+    completeAudit: triggerProcessing,  // Alias for ProcessingPage compatibility
+    getAuditStatus,
+    getAuditResult,
+};

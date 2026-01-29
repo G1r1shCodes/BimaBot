@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { api } from '@/app/services/api';
+import { api } from '@/services/api';
 
 interface ProcessingPageProps {
   auditId: string | null;
