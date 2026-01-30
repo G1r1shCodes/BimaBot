@@ -267,13 +267,13 @@ def extract_text_with_async_textract(s3_key: str) -> str:
         job_id = response['JobId']
         print(f"📋 Job ID: {job_id}")
         
-        # Poll for completion
-        max_wait_time = 60  # seconds
-        poll_interval = 2   # seconds
+        # Poll for completion (optimized for speed - matching reference backend)
+        max_wait_time = 90  # seconds (increased from 30s to handle larger documents)
+        poll_interval = 1    # seconds (reduced from 2s for faster completion)
         elapsed_time = 0
         
         while elapsed_time < max_wait_time:
-            print(f"⏳ Waiting for job completion... ({elapsed_time}s elapsed)")
+            print(f"⏳ Polling job... ({elapsed_time}s elapsed)")
             time.sleep(poll_interval)
             elapsed_time += poll_interval
             

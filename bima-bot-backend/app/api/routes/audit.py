@@ -63,14 +63,17 @@ async def upload_documents(
             detail=f"Upload not allowed. Audit status is '{audit['status']}', expected 'created'"
         )
     
-    # 2. Validate file types
-    bill_ext = Path(bill.filename).suffix.lower() if bill.filename else ""
-    policy_ext = Path(policy.filename).suffix.lower() if policy.filename else ""
+    # Validate file types
+    bill_ext = bill.filename.split('.')[-1].lower()
+    policy_ext = policy.filename.split('.')[-1].lower()
     
-    if bill_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Bill must be PDF, got {bill_ext}")
-    if policy_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Policy must be PDF, got {policy_ext}")
+    # Bill can be PDF or image (JPEG, JPG, PNG)
+    if bill_ext not in ['pdf', 'jpeg', 'jpg', 'png']:
+        raise HTTPException(status_code=400, detail=f"Bill must be PDF or image (JPEG/PNG), got .{bill_ext}")
+    
+    # Policy must be PDF only
+    if policy_ext != 'pdf':
+        raise HTTPException(status_code=400, detail=f"Policy must be PDF, got .{policy_ext}")
     
     # 3. Validate file sizes
     bill_content = await bill.read()

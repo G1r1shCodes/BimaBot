@@ -24,6 +24,20 @@ class FlagSeverity(str, Enum):
     INFO = "info"          # Informational only
 
 
+class FlagScope(str, Enum):
+    """
+    Flag scope - determines presentation tier in UI.
+    
+    This matches insurance industry language:
+    - ELIGIBILITY: Foundational issues that block entire claim (PED, waiting period)
+    - CHARGE: Specific deductions from otherwise eligible claim (room rent, consumables)
+    - INFORMATIONAL: Patient responsibility or FYI items (co-pay)
+    """
+    ELIGIBILITY = "eligibility"      # Blocks entire claim - shown as "Under Review"
+    CHARGE = "charge"                # Specific amount deduction
+    INFORMATIONAL = "informational"  # Patient responsibility / FYI
+
+
 class AuditStatus(str, Enum):
     """Audit processing status"""
     CREATED = "created"        # After /start, before /upload
@@ -35,6 +49,7 @@ class AuditStatus(str, Enum):
 class AuditFlag(BaseModel):
     flag_type: FlagType
     severity: FlagSeverity
+    flag_scope: FlagScope = FlagScope.CHARGE  # Default for backward compatibility
     line_item_id: Optional[str] = None    # References LineItem.line_item_id
     amount_affected: Optional[float] = None
     reason: str                           # Human-readable explanation

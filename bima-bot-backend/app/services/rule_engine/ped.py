@@ -11,7 +11,7 @@ Rule Logic (deterministic):
 """
 
 from typing import List
-from app.models.audit import AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill
 from app.models.policy import PolicyData
 
@@ -83,6 +83,7 @@ def check_ped(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
         AuditFlag(
             flag_type=FlagType.PED,
             severity=FlagSeverity.ERROR,
+            flag_scope=FlagScope.ELIGIBILITY,  # Blocks entire claim
             line_item_id=None,  # Affects entire claim
             amount_affected=total_billed,
             reason=f"Pre-existing conditions detected: {', '.join(matching_peds)}. Waiting period verification required.",

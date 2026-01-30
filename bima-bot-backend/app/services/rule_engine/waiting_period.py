@@ -13,7 +13,7 @@ For Phase 3, we flag for manual verification.
 """
 
 from typing import List
-from app.models.audit import AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill
 from app.models.policy import PolicyData
 
@@ -42,6 +42,7 @@ def check_waiting_period(bill: HospitalBill, policy: PolicyData) -> List[AuditFl
             AuditFlag(
                 flag_type=FlagType.WAITING_PERIOD,
                 severity=FlagSeverity.INFO,
+                flag_scope=FlagScope.ELIGIBILITY,
                 line_item_id=None,
                 amount_affected=None,
                 reason=f"Unable to verify {policy.general_waiting_period_months}-month waiting period (Policy inception date missing).",

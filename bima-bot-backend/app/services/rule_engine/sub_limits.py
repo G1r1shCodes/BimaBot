@@ -11,7 +11,7 @@ Rule Logic (deterministic):
 """
 
 from typing import List, Dict
-from app.models.audit import AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill, ChargeCategory
 from app.models.policy import PolicyData, SubLimit
 
@@ -80,6 +80,7 @@ def check_sub_limits(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
                 AuditFlag(
                     flag_type=FlagType.SUB_LIMIT,
                     severity=FlagSeverity.WARNING,
+                    flag_scope=FlagScope.CHARGE,
                     line_item_id=primary_charge.line_item_id if primary_charge else None,
                     amount_affected=excess,
                     reason=f"Sub-limit exceeded for {sub_limit.category}. Charged: ₹{total_in_category:,.0f}, Limit: ₹{limit_amount:,.0f}.",

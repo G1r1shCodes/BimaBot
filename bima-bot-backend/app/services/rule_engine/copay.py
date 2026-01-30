@@ -10,7 +10,7 @@ Rule Logic (deterministic):
 """
 
 from typing import List
-from app.models.audit import AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill
 from app.models.policy import PolicyData
 
@@ -38,6 +38,7 @@ def check_copay(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
         AuditFlag(
             flag_type=FlagType.COPAY,
             severity=FlagSeverity.INFO,
+            flag_scope=FlagScope.INFORMATIONAL,
             line_item_id=None,  # Applies to entire claim
             amount_affected=copay_amount,
             reason=f"Policy has {policy.copay_percentage}% co-payment clause. Patient pays ₹{copay_amount:,.0f}.",

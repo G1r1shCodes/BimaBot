@@ -12,16 +12,19 @@ import uuid
 from datetime import datetime
 from typing import Dict, Optional, List
 
-from app.models.audit import AuditResult, AuditStatus, AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditResult, AuditStatus, AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill
 from app.models.policy import PolicyData
 
-# New Phase 4 Imports
+# Phase 4 Imports
 from app.services.ocr.ocr_service import extract_text_from_document
-from app.services.ingestion.bill_parser import parse_bill_from_text
-from app.services.ingestion.policy_parser import parse_policy_from_text
+from app.services.ingestion.bill_parser import parse_bill_from_text, parse_bill_from_structured
+from app.services.ingestion.policy_parser import parse_policy_from_text, parse_policy_from_structured
 from app.services.validation.schema_validator import validate_bill_structure, validate_policy_structure
 from app.services.rule_engine import run_audit_rules
+
+# AI Services (New - Reference Backend Pattern)
+from app.services.ai.structuring_service import structure_and_categorize
 
 
 # In-memory audit store
@@ -58,14 +61,56 @@ def process_audit_pipeline(
         policy_s3_key: S3 key for policy (e.g., 'audits/AUD-123/policy.pdf')
     """
     
-    # 1. OCR STEP (Read from S3 via Textract!)
+    # 1. OCR STEP (Read from S3 via Textract - OPTIMIZED 1s polling)
     # Pass S3 keys to OCR service for multi-user safe processing
+    print(f"📄 Starting OCR extraction for audit {audit_id}...")
     bill_text = extract_text_from_document(bill_path, bill_s3_key)
     policy_text = extract_text_from_document(policy_path, policy_s3_key)
     
-    # 2. INGESTION STEP (AI Parsing)
-    bill: Optional[HospitalBill] = parse_bill_from_text(bill_text)
-    policy: Optional[PolicyData] = parse_policy_from_text(policy_text)
+    # Log OCR results for debugging
+    print(f"   Bill OCR: {len(bill_text) if bill_text else 0} characters")
+    print(f"   Policy OCR: {len(policy_text) if policy_text else 0} characters")
+    
+    if not bill_text or len(bill_text) < 50:
+        print(f"❌ CRITICAL: Bill OCR text is empty or too short!")
+        print(f"   Bill path: {bill_path}")
+        print(f"   Bill S3 key: {bill_s3_key}")
+        return _create_error_result(audit_id, "OCR failed to extract text from bill. Please ensure the document is readable and properly formatted.")
+    
+    if not policy_text or len(policy_text) < 50:
+        print(f"❌ CRITICAL: Policy OCR text is empty or too short!")
+        return _create_error_result(audit_id, "OCR failed to extract text from policy document.")
+    
+    # 2. AI STRUCTURING STEP (Nova Lite for schema-aware structuring)
+    # AI converts raw text → structured JSON with category classification
+    # Categories are assigned BEFORE rules run (AI understands, Rules decide)
+    print("🧠 AI Structuring: Converting text to structured data...")
+    structured_data = structure_and_categorize(bill_text, policy_text)
+    
+    # 3. VALIDATION & OBJECT CREATION
+    # Use AI-structured data if available, otherwise fallback to raw text parsing
+    bill: Optional[HospitalBill] = None
+    policy: Optional[PolicyData] = None
+    
+    if structured_data.get('bill'):
+        # PRIMARY PATH: Use AI-structured data (preferred)
+        print("✅ Using AI-structured bill data")
+        bill = parse_bill_from_structured(structured_data['bill'])
+    
+    if not bill:
+        # FALLBACK: Parse from raw text if AI structuring failed
+        print("⚠️ Falling back to text-based parsing for bill")
+        bill = parse_bill_from_text(bill_text)
+    
+    if structured_data.get('policy'):
+        # PRIMARY PATH: Use AI-structured data (preferred)
+        print("✅ Using AI-structured policy data")
+        policy = parse_policy_from_structured(structured_data['policy'])
+    
+    if not policy:
+        # FALLBACK: Parse from raw text if AI structuring failed
+        print("⚠️ Falling back to text-based parsing for policy")
+        policy = parse_policy_from_text(policy_text)
     
     # Handle OCR/Parsing Failures (Safety Rule: No guessing)
     pipeline_flags: List[AuditFlag] = []
@@ -78,26 +123,65 @@ def process_audit_pipeline(
         # Fallback if policy is unreadable
         return _create_error_result(audit_id, "Unable to parse policy document.")
 
-    # 3. VALATION STEP (Structural Integrity)
+    # 4. VALIDATION STEP (Structural Integrity)
     pipeline_flags.extend(validate_bill_structure(bill))
     pipeline_flags.extend(validate_policy_structure(policy))
     
-    # 4. RULE ENGINE STEP (The Brain)
-    # Only run rules if validation passed (or just append validation errors)
+    # 5. RULE ENGINE STEP (The Brain - Deterministic Logic)
+    # Rules receive AI-classified categories and structured data
+    # Rules make ALL decisions (eligibility, amounts, deductions)
+    # AI classification ensures consistent categorization before rule evaluation
     rule_flags = run_audit_rules(bill, policy)
     pipeline_flags.extend(rule_flags)
     
-    # 5. SUMMARY CALCULATION
+    # 6. SUMMARY CALCULATION WITH DOMINANT RULE LOGIC
     total_billed = sum(item.amount for item in bill.charges) if bill.charges else 0.0
     
-    amount_under_review = sum(
-        flag.amount_affected for flag in pipeline_flags 
-        if flag.amount_affected is not None
+    # CRITICAL FIX: Implement dominant rule logic to prevent double-counting
+    # 
+    # Problem: Multiple rules can flag the SAME money (e.g., PED affects entire bill,
+    # but room rent, consumables, copay also affect portions of that same bill).
+    # Naive sum of all amounts leads to double/triple counting.
+    #
+    # Solution: Use rule priority hierarchy
+    #   1. DOMINANT RULES (PED, waiting period) → block entire claim
+    #   2. DEDUCTIVE RULES (sub-limits, room rent, consumables, copay) → specific amounts
+    #
+    # If a dominant rule applies, it takes precedence and other rules become
+    # "supporting reasons" rather than additional amounts to sum.
+    
+    # Check for dominant flags (PED or waiting period with severity ERROR)
+    has_ped_blocker = any(
+        flag.flag_type == FlagType.PED and flag.severity == FlagSeverity.ERROR
+        for flag in pipeline_flags
     )
     
-    fully_covered_amount = total_billed - amount_under_review
+    has_waiting_period_blocker = any(
+        flag.flag_type == FlagType.WAITING_PERIOD and flag.severity == FlagSeverity.ERROR
+        for flag in pipeline_flags
+    )
     
-    # 6. REPORTING STEP (Delivery)
+    if has_ped_blocker or has_waiting_period_blocker:
+        # DOMINANT RULE CASE: Entire claim is under dispute
+        # All other flags become supporting justification, not separate amounts
+        amount_under_review = total_billed
+        
+    else:
+        # STANDARD CASE: Sum specific deductions (room rent, consumables, copay, etc.)
+        # These rules don't overlap significantly, so summation is appropriate
+        amount_under_review = sum(
+            flag.amount_affected for flag in pipeline_flags 
+            if flag.amount_affected is not None
+        )
+        
+        # Safety cap: amount under review can NEVER exceed total bill
+        # (Protects against edge cases where rules might still overlap)
+        amount_under_review = min(amount_under_review, total_billed)
+    
+    fully_covered_amount = max(0, total_billed - amount_under_review)
+    
+    # 7. REPORTING STEP (Letter Generation with AI)
+    # Letter generator will be enhanced to use RAG for IRDAI citations
     letter_text = generate_dispute_letter(bill, policy, pipeline_flags)
     
     return AuditResult(

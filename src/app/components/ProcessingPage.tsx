@@ -5,10 +5,11 @@ import { api } from '@/services/api';
 interface ProcessingPageProps {
   auditId: string | null;
   onComplete: () => void;
-  isSample: boolean;
+  isSample?: boolean;
+  onRetry?: () => void;
 }
 
-export default function ProcessingPage({ auditId, onComplete, isSample }: ProcessingPageProps) {
+export default function ProcessingPage({ auditId, onComplete, isSample, onRetry }: ProcessingPageProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,35 +27,47 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
 
     let cancelled = false;
     let pollInterval: NodeJS.Timeout;
+    let stepInterval: NodeJS.Timeout;
 
     async function processAudit() {
       try {
-        // Step 1: Trigger processing
+        // START ANIMATION IMMEDIATELY - before any async calls
+        let stepIndex = 0;
+        stepInterval = setInterval(() => {
+          if (cancelled) return;
+
+          stepIndex++;
+          if (stepIndex <= steps.length) {
+            setCurrentStep(stepIndex);
+          }
+        }, 1500); // Advance every 1.5 seconds
+
+        // THEN trigger processing (this might take time)
         await api.completeAudit(auditId!);
 
-        setCurrentStep(1);
-
-        // Step 2: Poll for status
+        // Poll for status
         pollInterval = setInterval(async () => {
           if (cancelled) return;
 
           try {
             const { status } = await api.getAuditStatus(auditId!);
 
-            // Update steps based on progress
-            if (status === 'processing') {
-              setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
-            } else if (status === 'completed') {
-              setCurrentStep(steps.length);
+            if (status === 'completed') {
+              // Clear the step animation
+              clearInterval(stepInterval);
               clearInterval(pollInterval);
+
+              // Ensure all steps are shown as complete
+              setCurrentStep(steps.length);
 
               // Wait a moment to show completed state
               setTimeout(() => {
                 if (!cancelled) {
                   onComplete();
                 }
-              }, 500);
+              }, 800);
             } else if (status === 'failed') {
+              clearInterval(stepInterval);
               clearInterval(pollInterval);
               setError('Audit processing failed. Please try again.');
             }
@@ -62,10 +75,11 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
             console.error('Status poll error:', err);
             // Continue polling even if one request fails
           }
-        }, 2000); // Poll every 2 seconds
+        }, 1000); // Poll every 1 second for faster completion detection
 
       } catch (err) {
         console.error('Failed to start processing:', err);
+        if (stepInterval) clearInterval(stepInterval);
         setError(err instanceof Error ? err.message : 'Failed to start processing');
       }
     }
@@ -77,6 +91,9 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
       cancelled = true;
       if (pollInterval) {
         clearInterval(pollInterval);
+      }
+      if (stepInterval) {
+        clearInterval(stepInterval);
       }
     };
   }, [auditId, onComplete]);
@@ -95,7 +112,15 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
               <h1 className="text-3xl mb-4 text-gray-900">Processing Error</h1>
               <p className="text-gray-600 mb-6">{error}</p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  // Clear localStorage and reset app state
+                  localStorage.clear();
+                  if (onRetry) {
+                    onRetry();
+                  } else {
+                    window.location.href = '/';
+                  }
+                }}
                 className="bg-[#1E3A8A] hover:bg-[#1E40AF] text-white px-6 py-3 rounded-lg"
               >
                 Try Again
@@ -113,7 +138,7 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
         <div className="bg-white rounded-xl border border-gray-200 p-12">
           {/* Header */}
           <div className="text-center mb-12">
-            <div className="bg-teal-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="bg-teal-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
               <svg className="w-10 h-10 text-teal-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -129,10 +154,10 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
             {steps.map((step, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${index < currentStep
+                className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all duration-500 ${index < currentStep
                   ? 'bg-teal-50 border-teal-200'
                   : index === currentStep
-                    ? 'bg-slate-50 border-slate-300'
+                    ? 'bg-blue-50 border-blue-300 shadow-sm'
                     : 'bg-gray-50 border-gray-200'
                   }`}
               >
@@ -140,16 +165,19 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
                   {index < currentStep ? (
                     <CheckCircle2 className="w-6 h-6 text-teal-600" />
                   ) : index === currentStep ? (
-                    <div className="w-6 h-6 rounded-full border-2 border-teal-600 bg-teal-100" />
+                    <div className="relative">
+                      <div className="w-6 h-6 rounded-full border-2 border-teal-600 bg-teal-100 animate-pulse" />
+                      <div className="absolute inset-0 w-6 h-6 rounded-full border-2 border-teal-400 animate-ping opacity-75" />
+                    </div>
                   ) : (
                     <div className="w-6 h-6 rounded-full border-2 border-gray-300" />
                   )}
                 </div>
                 <span
-                  className={`text-lg ${index < currentStep
-                    ? 'text-teal-700'
+                  className={`text-lg transition-colors duration-300 ${index < currentStep
+                    ? 'text-teal-700 font-medium'
                     : index === currentStep
-                      ? 'text-slate-700'
+                      ? 'text-blue-700 font-semibold'
                       : 'text-gray-500'
                     }`}
                 >
@@ -163,10 +191,13 @@ export default function ProcessingPage({ auditId, onComplete, isSample }: Proces
           <div className="mt-8">
             <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-teal-600 h-full transition-all duration-1000 ease-out"
+                className="bg-gradient-to-r from-teal-600 to-teal-500 h-full transition-all duration-700 ease-out"
                 style={{ width: `${(currentStep / steps.length) * 100}%` }}
               />
             </div>
+            <p className="text-center text-sm text-gray-500 mt-2">
+              Step {Math.min(currentStep, steps.length)} of {steps.length}
+            </p>
           </div>
         </div>
       </div>

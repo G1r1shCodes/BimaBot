@@ -15,16 +15,23 @@ export type FlagType =
     | 'REGISTRATION_FEE'
     | 'MISC';
 
-export type FlagSeverity = 'INFO' | 'WARNING' | 'ERROR';
+export type FlagSeverity = 'info' | 'warning' | 'error';
+
+export type FlagScope = 'eligibility' | 'charge' | 'informational';
 
 // Audit Flag Interface
 export interface AuditFlag {
     flag_type: FlagType;
     severity: FlagSeverity;
-    charge_category?: string;
-    charge_description?: string;
+    flag_scope: FlagScope;  // Required for presentation tier categorization
+    line_item_id?: string;
     amount_affected?: number;
     reason: string;
+    policy_clause?: string;
+    irdai_reference?: string;
+    // Legacy fields (kept for backward compatibility)
+    charge_category?: string;
+    charge_description?: string;
     regulatory_reference?: string;
 }
 

@@ -11,7 +11,7 @@ Rule Logic (deterministic):
 """
 
 from typing import List
-from app.models.audit import AuditFlag, FlagType, FlagSeverity
+from app.models.audit import AuditFlag, FlagType, FlagSeverity, FlagScope
 from app.models.bill import HospitalBill, ChargeCategory
 from app.models.policy import PolicyData
 
@@ -64,6 +64,7 @@ def check_room_rent(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
                     AuditFlag(
                         flag_type=FlagType.ROOM_RENT,
                         severity=FlagSeverity.WARNING,
+                        flag_scope=FlagScope.CHARGE,
                         line_item_id=charge.line_item_id,
                         amount_affected=total_excess,
                         reason=f"Room rent exceeds policy limit. Charged: ₹{daily_rate}/day, Limit: ₹{limit_per_day}/day.",
@@ -81,6 +82,7 @@ def check_room_rent(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
                 AuditFlag(
                     flag_type=FlagType.ROOM_RENT,
                     severity=FlagSeverity.INFO,
+                    flag_scope=FlagScope.CHARGE,
                     line_item_id=charge.line_item_id,
                     amount_affected=None,
                     reason=f"Room category verification needed. Policy limit: {policy.room_limit_value}.",

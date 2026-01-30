@@ -174,6 +174,7 @@ export default function App() {
             auditId={auditId}
             onComplete={() => navigateTo('results')}
             isSample={auditData.isSample}
+            onRetry={finishAudit}
           />
         )}
 
