@@ -54,6 +54,7 @@ class AuditFlag(BaseModel):
     amount_affected: Optional[float] = None
     reason: str                           # Human-readable explanation
     policy_clause: Optional[str] = None   # Section reference
+    charge_description: Optional[str] = None # Added for easier UI mapping & AI explanation matching
     irdai_reference: Optional[str] = None
 
 

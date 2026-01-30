@@ -15,23 +15,16 @@ export type FlagType =
     | 'REGISTRATION_FEE'
     | 'MISC';
 
-export type FlagSeverity = 'info' | 'warning' | 'error';
-
-export type FlagScope = 'eligibility' | 'charge' | 'informational';
+export type FlagSeverity = 'INFO' | 'WARNING' | 'ERROR';
 
 // Audit Flag Interface
 export interface AuditFlag {
     flag_type: FlagType;
     severity: FlagSeverity;
-    flag_scope: FlagScope;  // Required for presentation tier categorization
-    line_item_id?: string;
-    amount_affected?: number;
-    reason: string;
-    policy_clause?: string;
-    irdai_reference?: string;
-    // Legacy fields (kept for backward compatibility)
     charge_category?: string;
     charge_description?: string;
+    amount_affected?: number;
+    reason: string;
     regulatory_reference?: string;
 }
 
@@ -43,8 +36,10 @@ export interface HospitalBill {
     admission_date?: string;
     discharge_date?: string;
     total_amount?: number;
-    line_items?: Array<{
-        description: string;
+    charges?: Array<{
+        line_item_id: string;
+        label?: string;
+        description?: string;
         amount: number;
         category?: string;
     }>;

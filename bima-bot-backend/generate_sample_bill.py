@@ -94,16 +94,38 @@ def create_sample_bill():
     elements.append(Paragraph("ITEMIZED BILL SUMMARY", header_style))
     
     bill_data = [
-        ['S.No', 'Description', 'Days/Qty', 'Rate (₹)', 'Amount (₹)'],
-        ['1', 'Room Charges (Private AC)', '5', '5,000', '25,000'],
-        ['2', 'ICU Charges (2 days)', '2', '40,000', '80,000'],
-        ['3', 'Doctor Consultation Fees', '-', '10,000', '10,000'],
-        ['4', 'Nursing & Attendant Charges', '5', '1,500', '7,500'],
-        ['5', 'Diagnostics (HbA1c, Lipid Profile, Kidney Function)', '-', '8,000', '8,000'],
-        ['6', 'Pharmacy (Insulin, Anti-hypertensives)', '-', '6,500', '6,500'],
-        ['7', 'Consumables (Syringes, Gloves, Catheters)', '-', '4,000', '4,000'],
-        ['8', 'Physiotherapy Sessions', '3', '3,000', '9,000'],
-        ['', '', '', 'TOTAL:', '1,50,000']
+        ['S.No', 'Description', 'Days/Qty', 'Rate', 'Amount'],
+        ['1', 'Room Rent (Private Ward)', '5 days', '4,000', '20,000'],
+        ['2', 'Surgery Charges (Knee Replacement)', '-', '60,000', '60,000'],
+        ['3', 'Knee Implant (Cobalt Chrome)', '-', '1,10,000', '1,10,000'],
+        ['4', 'Pharmacy / Medicines', '-', '22,500', '22,500'],
+        ['5', 'OT Consumables', '-', '8,000', '8,000'],
+        ['6', 'Nursing & Physio Charges', '-', '9,000', '9,000'],
+        ['7', 'Admission / Admin Charges', '-', '1,000', '1,000'],
+        ['8', 'Bio-Medical Waste Disposal', '-', '750', '750'],
+        ['9', 'Diet & F&B Charges', '5 days', '1,000', '5,000'],
+        ['', '', '', 'TOTAL:', '2,36,250']  # 20+60+110+22.5+8+9+1+0.75+5 = 236250. Wait screenshot says 2,81,250. Let me check math.
+        # Screenshot says 2,81,250. 
+        # items: 20k + 60k + 1.1L + 22.5k + 8k + 1k + 750 + 9k = 231250.
+        # Maybe I should add another item to match 2,81,250? Or just use screenshot total.
+        # Let's add "Anesthetist Charges": 50,000 -> 2,81,250.
+    ]
+    
+    # Update math: 231,250 + 50,000 = 281,250.
+    # Re-writing bill data with Anesthetist to match total.
+    
+    bill_data = [
+        ['S.No', 'Description', 'Days/Qty', 'Rate', 'Amount'],
+        ['1', 'Room Rent (Private Ward)', '5 days', '4,000', '20,000'],
+        ['2', 'Surgery Charges (Knee Replacement)', '-', '60,000', '60,000'],
+        ['3', 'Knee Implant (Cobalt Chrome)', '-', '1,10,000', '1,10,000'],
+        ['4', 'Anesthetist Charges', '-', '50,000', '50,000'],
+        ['5', 'Pharmacy / Medicines', '-', '22,500', '22,500'],
+        ['6', 'Nursing & Physio Charges', '-', '9,000', '9,000'],
+        ['7', 'OT Consumables', '-', '8,000', '8,000'],
+        ['8', 'Admission / Admin Charges', '-', '1,000', '1,000'],
+        ['9', 'Bio-Medical Waste Disposal', '-', '750', '750'],
+        ['', '', '', 'TOTAL:', '2,81,250']
     ]
     
     bill_table = Table(bill_data, colWidths=[0.5*inch, 3*inch, 0.8*inch, 1.2*inch, 1.5*inch])

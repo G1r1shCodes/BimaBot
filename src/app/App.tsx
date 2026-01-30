@@ -57,10 +57,10 @@ export default function App() {
       }
     }
 
-    if (savedPage && savedAuditId) {
-      setCurrentPage(savedPage as Page);
-      setIsAuditMode(true);
-    }
+    // if (savedPage && savedAuditId) {
+    //   setCurrentPage(savedPage as Page);
+    //   setIsAuditMode(true);
+    // }
   }, []);
 
   // Save audit ID to localStorage whenever it changes
@@ -185,6 +185,7 @@ export default function App() {
             onResultLoaded={setAuditResult}
             onGenerateDispute={() => navigateTo('dispute')}
             isSample={auditData.isSample}
+            onBack={finishAudit}
           />
         )}
 

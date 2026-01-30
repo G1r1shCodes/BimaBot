@@ -49,4 +49,8 @@ def run_audit_rules(bill: HospitalBill, policy: PolicyData) -> List[AuditFlag]:
     flags.extend(sub_limits.check_sub_limits(bill, policy))
     flags.extend(copay.check_copay(bill, policy))
     
+    # Check specific exclusions (Annexure A)
+    from . import exclusions
+    flags.extend(exclusions.check_exclusions(bill, policy))
+    
     return flags

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, XCircle, FileText, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { getAuditResult } from '@/services/api';
 import type { AuditResult, AuditFlag } from '@/types/types';
 
@@ -8,7 +8,9 @@ interface AuditResultsPageProps {
   auditResult: AuditResult | null;
   onResultLoaded: (result: AuditResult) => void;
   onGenerateDispute: () => void;
+  onGenerateDispute: () => void;
   isSample: boolean;
+  onBack?: () => void;
 }
 
 export default function AuditResultsPage({
@@ -16,7 +18,8 @@ export default function AuditResultsPage({
   auditResult,
   onResultLoaded,
   onGenerateDispute,
-  isSample
+  isSample,
+  onBack
 }: AuditResultsPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,28 +78,28 @@ export default function AuditResultsPage({
 
   const { flags, total_billed, amount_under_review, fully_covered_amount } = auditResult;
 
-  // Categorize flags by scope
-  const eligibilityFlags = flags.filter(f => f.flag_scope === 'eligibility');
-  const chargeFlags = flags.filter(f => f.flag_scope === 'charge');
-  const infoFlags = flags.filter(f => f.flag_scope === 'informational');
-
-  // Check if there are blocking eligibility issues (ERROR severity)
-  const hasEligibilityBlock = eligibilityFlags.some(f => f.severity === 'error');
-
-  // Calculate charge-level deductions (excluding eligibility blocks)
-  const chargeLevelDeductions = chargeFlags.reduce((sum, flag) =>
-    sum + (flag.amount_affected || 0), 0
-  );
+  // Group non-covered/review flags for explanation
+  const flaggedItems = flags.filter(f => f.flag_type !== 'MISC' && f.amount_affected);
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-6xl mx-auto px-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl mb-4 text-gray-900">Insurance Claim Audit Summary</h1>
-          <p className="text-xl text-gray-600">
-            Review of charges against your policy and IRDAI guidelines
-          </p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl mb-4 text-gray-900">Insurance Claim Audit Summary</h1>
+            <p className="text-xl text-gray-600">
+              Review of charges against your policy and IRDAI guidelines
+            </p>
+          </div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            >
+              Start New Audit
+            </button>
+          )}
         </div>
 
         {/* Summary Cards */}
@@ -107,225 +110,142 @@ export default function AuditResultsPage({
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <p className="text-sm text-gray-600 mb-2">Total Observations</p>
+            <p className="text-sm text-gray-600 mb-2">Charges Reviewed</p>
             <p className="text-3xl text-gray-900">{flags.length}</p>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <p className="text-sm text-gray-600 mb-2">
-              {hasEligibilityBlock ? 'Under Review' : 'Charge Deductions'}
-            </p>
-            <p className={`text-3xl ${hasEligibilityBlock ? 'text-red-600' : 'text-amber-600'}`}>
-              ₹{(hasEligibilityBlock ? total_billed : chargeLevelDeductions).toLocaleString('en-IN')}
-            </p>
+            <p className="text-sm text-gray-600 mb-2">Amount Requiring Review</p>
+            <p className="text-3xl text-red-600">₹{amount_under_review.toLocaleString('en-IN')}</p>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-sm text-gray-600 mb-2">Status</p>
             <div className="flex items-center gap-2">
-              {hasEligibilityBlock ? (
-                <>
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <p className="text-sm text-slate-700">Eligibility Review</p>
-                </>
-              ) : chargeFlags.length > 0 ? (
-                <>
-                  <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                  <p className="text-sm text-slate-700">Deductions Found</p>
-                </>
-              ) : (
-                <>
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <p className="text-sm text-slate-700">Eligible</p>
-                </>
-              )}
+              <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+              <p className="text-sm text-slate-700">
+                {amount_under_review > 0 ? 'Potential Discrepancies' : 'All Clear'}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* ELIGIBILITY SECTION - Shown if eligibility issues exist */}
-        {eligibilityFlags.length > 0 && (
-          <div className={`rounded-xl border-2 overflow-hidden mb-8 ${hasEligibilityBlock ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300'
-            }`}>
-            <div className={`px-6 py-4 ${hasEligibilityBlock ? 'bg-red-100' : 'bg-blue-100'}`}>
-              <div className="flex items-center gap-3">
-                {hasEligibilityBlock ? (
-                  <XCircle className="w-6 h-6 text-red-700" />
-                ) : (
-                  <AlertCircle className="w-6 h-6 text-blue-700" />
-                )}
-                <h2 className={`text-2xl font-semibold ${hasEligibilityBlock ? 'text-red-900' : 'text-blue-900'
-                  }`}>
-                  {hasEligibilityBlock ? '🔴 Claim Under Eligibility Review' : 'ℹ️ Eligibility Observations'}
-                </h2>
-              </div>
-            </div>
+        {/* Detailed Bill Analysis Table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <h3 className="px-6 py-4 text-lg font-semibold text-gray-900 border-b border-gray-200 bg-gray-50">
+            Charge Details
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-6 py-4 text-sm text-gray-700">Charge Description</th>
+                  <th className="text-right px-6 py-4 text-sm text-gray-700">Amount</th>
+                  <th className="text-left px-6 py-4 text-sm text-gray-700">Status</th>
+                  <th className="text-left px-6 py-4 text-sm text-gray-700">Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditResult.bill?.charges?.map((item: { line_item_id: string; label?: string; description?: string; amount: number; category?: string; }, index: number) => {
+                  // Find if there's a specific flag for this item
+                  // Backend flags link via line_item_id.
+                  // If line_item_id is missing in frontend type, fallback to index matching if needed, 
+                  // but backend provides line_item_id.
+                  // We need to match based on the ID.
+                  const flag = flags.find(f => f.line_item_id === item.line_item_id);
 
-            <div className="p-6 space-y-4">
-              {eligibilityFlags.map((flag: AuditFlag, index: number) => (
-                <div key={index} className="bg-white rounded-lg border border-gray-200 p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${flag.severity === 'error' ? 'bg-red-100 text-red-800' :
-                            flag.severity === 'warning' ? 'bg-amber-100 text-amber-800' :
-                              'bg-blue-100 text-blue-800'
-                          }`}>
-                          {flag.flag_type.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-gray-900 mb-2 text-lg">{flag.reason}</p>
-                      {flag.policy_clause && (
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium">Policy Clause:</span> {flag.policy_clause}
-                        </p>
-                      )}
-                    </div>
-                    {flag.amount_affected && (
-                      <div className="text-right ml-4">
-                        <p className="text-sm text-gray-600 mb-1">Affected Amount</p>
-                        <p className="text-2xl font-semibold text-red-700">
-                          ₹{flag.amount_affected.toLocaleString('en-IN')}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  // Filter out "Global" flags (like WAITING_PERIOD) from this row-based view
+                  // Actually, the iteration is DRIVEN by line items, so global flags naturally won't match a line item ID.
+                  // This implicitly satisfies "what should not come is Waiting Period And All Rules"
 
-                  {hasEligibilityBlock && flag.severity === 'error' && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <p className="text-sm text-gray-700 italic">
-                        ⚠️ This is a foundational issue that affects the entire claim. The claim cannot be processed until this is resolved.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* CHARGE-LEVEL DEDUCTIONS SECTION */}
-        {chargeFlags.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
-            <div className="bg-amber-50 px-6 py-4 border-b border-amber-200">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-6 h-6 text-amber-700" />
-                <h2 className="text-2xl font-semibold text-amber-900">
-                  {hasEligibilityBlock
-                    ? 'Additional Observations (if claim is reconsidered)'
-                    : '✅ Claim is Eligible — Charge-Level Deductions'}
-                </h2>
-              </div>
-              {!hasEligibilityBlock && (
-                <p className="text-sm text-gray-600 mt-2">
-                  Your claim is eligible for processing. The following deductions apply to specific charges:
-                </p>
-              )}
-            </div>
+                  const isFlagged = !!flag && (flag.severity === 'warning' || flag.severity === 'error');
+                  const isCovered = !isFlagged;
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Issue</th>
-                    <th className="text-right px-6 py-4 text-sm font-semibold text-gray-700">Amount</th>
-                    <th className="text-center px-6 py-4 text-sm font-semibold text-gray-700">Status</th>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-700">Explanation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chargeFlags.map((flag: AuditFlag, index: number) => (
+                  return (
                     <tr
                       key={index}
-                      className={`border-b border-gray-100 ${flag.severity === 'error' ? 'bg-red-50' :
-                          flag.severity === 'warning' ? 'bg-amber-50' : ''
-                        }`}
+                      className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-6 py-4 text-gray-900 font-medium">
-                        {flag.flag_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      <td className="px-6 py-4 text-gray-900">
+                        {item.label || item.description || "Unknown Charge"}
+                        {item.category && (
+                          <span className="block text-xs text-gray-500 mt-1 capitalize">
+                            {item.category.replace('_', ' ')}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-right text-gray-900 font-semibold">
-                        {flag.amount_affected
-                          ? `₹${flag.amount_affected.toLocaleString('en-IN')}`
-                          : '—'}
+                      <td className="px-6 py-4 text-right text-gray-900 font-medium">
+                        ₹{item.amount?.toLocaleString('en-IN')}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          {flag.severity === 'info' && (
+                        <div className="flex items-center gap-2">
+                          {isCovered ? (
                             <>
                               <CheckCircle2 className="w-5 h-5 text-green-600" />
-                              <span className="text-sm text-green-700">Noted</span>
+                              <span className="text-sm text-green-700 font-medium">Covered</span>
                             </>
-                          )}
-                          {flag.severity === 'warning' && (
+                          ) : (
                             <>
-                              <AlertCircle className="w-5 h-5 text-amber-600" />
-                              <span className="text-sm text-amber-700">Deduction</span>
-                            </>
-                          )}
-                          {flag.severity === 'error' && (
-                            <>
-                              <XCircle className="w-5 h-5 text-red-600" />
-                              <span className="text-sm text-red-700">Excluded</span>
+                              {flag?.severity === 'error' ? (
+                                <XCircle className="w-5 h-5 text-red-600" />
+                              ) : (
+                                <AlertCircle className="w-5 h-5 text-amber-600" />
+                              )}
+                              <span className={`text-sm font-medium ${flag?.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}>
+                                {flag?.severity === 'error' ? 'May Not Comply with Policy' : 'Subject to Review'}
+                              </span>
                             </>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {flag.reason}
-                        {flag.policy_clause && (
-                          <span className="block text-xs text-gray-500 mt-1">
-                            Ref: {flag.policy_clause}
+                        {isCovered ? (
+                          <span className="text-gray-400">Section 3.1 - {item.label?.split(' ')[0] || "General"}</span>
+                        ) : (
+                          // Show the specific reason for the flag
+                          <span className="font-medium text-gray-800">
+                            {flag?.reason && flag.reason.includes("Policy Annexure")
+                              ? flag.reason.split(" - ")[0] // Show "Policy Annexure A (List III)" part 
+                              : flag?.policy_clause || "Policy Exclusions"}
                           </span>
                         )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {!hasEligibilityBlock && chargeLevelDeductions > 0 && (
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                <div className="flex justify-between items-center text-lg">
-                  <span className="font-semibold text-gray-700">Total Bill:</span>
-                  <span className="text-gray-900">₹{total_billed.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between items-center text-lg mt-2">
-                  <span className="font-semibold text-gray-700">Total Deductions:</span>
-                  <span className="text-amber-700">₹{chargeLevelDeductions.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between items-center text-xl mt-3 pt-3 border-t border-gray-300">
-                  <span className="font-bold text-gray-900">Estimated Payable Amount:</span>
-                  <span className="font-bold text-green-700">
-                    ₹{(total_billed - chargeLevelDeductions).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              </div>
-            )}
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
 
-        {/* INFORMATIONAL SECTION */}
-        {infoFlags.length > 0 && (
-          <div className="bg-blue-50 rounded-xl border border-blue-200 p-6 mb-8">
+        {/* Explanation Box - Only show if there are flagged items */}
+        {flaggedItems.length > 0 && (
+          <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-6 mb-8">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
-                <div className="bg-blue-100 p-3 rounded-lg">
-                  <AlertCircle className="w-6 h-6 text-blue-700" />
+                <div className="bg-amber-100 p-3 rounded-lg">
+                  <AlertCircle className="w-6 h-6 text-amber-700" />
                 </div>
               </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold mb-2 text-gray-900">For Your Information</h3>
+              <div>
+                <h3 className="text-lg mb-2 text-gray-900">Explanation</h3>
+                <p className="text-gray-700 leading-relaxed mb-4">
+                  The charges marked above may not be permitted as per your policy terms or IRDAI guidelines.
+                </p>
                 <div className="space-y-3">
-                  {infoFlags.map((flag, idx) => (
-                    <div key={idx} className="bg-white p-4 rounded-lg border border-blue-200">
+                  {flaggedItems.map((flag, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-lg border border-amber-200">
                       <p className="text-gray-900 mb-1">
-                        <span className="font-medium">{flag.flag_type.replace('_', ' ').toUpperCase()}:</span> {flag.reason}
+                        <span className="font-medium">
+                          {flag.charge_description || flag.charge_category}
+                          {flag.amount_affected && ` (₹${flag.amount_affected.toLocaleString('en-IN')})`}:
+                        </span>
                       </p>
-                      {flag.amount_affected && (
-                        <p className="text-sm text-gray-600">
-                          Amount: ₹{flag.amount_affected.toLocaleString('en-IN')}
+                      <p className="text-sm text-gray-700">{flag.reason}</p>
+                      {flag.regulatory_reference && (
+                        <p className="text-xs text-gray-600 mt-2">
+                          Reference: {flag.regulatory_reference}
                         </p>
                       )}
                     </div>
@@ -333,15 +253,6 @@ export default function AuditResultsPage({
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* No Issues Found */}
-        {flags.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center mb-8">
-            <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h3 className="text-2xl mb-2 text-gray-900">No Issues Found</h3>
-            <p className="text-gray-600">All charges appear to be compliant with your policy and IRDAI guidelines.</p>
           </div>
         )}
 

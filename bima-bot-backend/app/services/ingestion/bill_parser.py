@@ -109,14 +109,42 @@ def parse_bill_from_structured(structured_data: dict) -> Optional[HospitalBill]:
     """
     try:
         # Extract charges and convert to LineItem objects
+        # Extract charges and convert to LineItem objects
+        # HYBRID CLASSIFICATION: Use AI category but override with rules if critical keywords match
         charges = []
         for idx, charge_dict in enumerate(structured_data.get("charges", [])):
+            description = charge_dict.get("description", "Unknown").strip()
+            ai_category_str = charge_dict.get("category", "other").lower()
+            
+            # Default to AI category
+            final_category = ChargeCategory.MISC
+            try:
+                final_category = ChargeCategory(ai_category_str)
+            except ValueError:
+                final_category = ChargeCategory.MISC
+            
+            # --- OVERRIDE RULES (For Safety) ---
+            desc_lower = description.lower()
+            
+            # Rule 1: Bio-Medical Waste -> MISC/OTHER (AI might say CONSUMABLES)
+            if "waste" in desc_lower or "bio-medical" in desc_lower:
+                final_category = ChargeCategory.MISC
+            
+            # Rule 2: Admin Charges -> MISC/OTHER
+            elif "admin" in desc_lower or "admission" in desc_lower or "registration" in desc_lower:
+                if "drug" not in desc_lower:
+                    final_category = ChargeCategory.MISC
+
+            # Rule 3: OT Consumables -> CONSUMABLES
+            elif "consumables" in desc_lower or "gloves" in desc_lower or "syringe" in desc_lower:
+                final_category = ChargeCategory.CONSUMABLES
+                
             charges.append(LineItem(
                 line_item_id=f"LI-{idx+1:03d}",
-                label=charge_dict.get("description", "Unknown"),
-                category=ChargeCategory(charge_dict.get("category", "other")),
+                label=description,
+                category=final_category,
                 amount=float(charge_dict.get("amount", 0)),
-                raw_text=charge_dict.get("description", "")
+                raw_text=description
             ))
         
         # Build HospitalBill from structured data

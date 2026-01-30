@@ -9,7 +9,7 @@ No business logic should exist in routes.
 
 import os
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 
 from app.models.audit import AuditResult, AuditStatus
 from app.services import audit_service
@@ -168,19 +168,34 @@ def get_audit_result(audit_id: str):
     return result
 
 
+def run_audit_background(audit_id: str, bill_path: str, policy_path: str, bill_s3_key: str, policy_s3_key: str):
+    """Helper to run the pipeline in background"""
+    print(f"🚀 Starting Background Audit: {audit_id}")
+    try:
+        audit = AUDIT_STORE[audit_id]
+        result = process_audit_pipeline(
+            audit_id=audit_id,
+            bill_path=bill_path,
+            policy_path=policy_path,
+            bill_s3_key=bill_s3_key,
+            policy_s3_key=policy_s3_key
+        )
+        audit["result"] = result
+        audit["status"] = AuditStatus.COMPLETED
+        print(f"✅ Background Audit Finished: {audit_id}")
+    except Exception as e:
+        print(f"❌ Background Audit Failed: {e}")
+        audit = AUDIT_STORE.get(audit_id)
+        if audit:
+            audit["status"] = AuditStatus.FAILED
+            audit["error"] = str(e)
+
 @router.post("/{audit_id}/complete")
-def complete_audit(audit_id: str):
+def complete_audit(audit_id: str, background_tasks: BackgroundTasks):
     """
-    Trigger audit processing pipeline.
+    Trigger audit processing pipeline (Async).
     
-    Phase 4.1: Validates files exist, processes PDFs, runs rules.
-    
-    Rules:
-    - Only allowed when status == "created"
-    - Requires bill_path and policy_path to be set
-    - Sets status = "processing" immediately
-    - Runs OCR → Parse → Validate → Rules
-    - Sets status = "completed" or "failed"
+    Phase 4.2: Now uses BackgroundTasks to avoid browser timeout
     """
     
     if audit_id not in AUDIT_STORE:
@@ -205,58 +220,15 @@ def complete_audit(audit_id: str):
     # Set processing status
     audit["status"] = AuditStatus.PROCESSING
     
-    try:
-        # Run pipeline with S3 keys for multi-user safe OCR processing
-        result = process_audit_pipeline(
-            audit_id=audit_id,
-            bill_path=audit["bill_path"],
-            policy_path=audit["policy_path"],
-            bill_s3_key=audit.get("bill_s3_key"),
-            policy_s3_key=audit.get("policy_s3_key")
-        )
-        
-        audit["result"] = result
-        audit["status"] = AuditStatus.COMPLETED
-        
-        # Cleanup: Delete entire audit folder from S3
-        # Multi-user safe: each audit has its own folder (audits/{audit_id}/)
-        try:
-            s3_keys_to_delete = []
-            
-            # Only clean up files we actually uploaded
-            if audit.get("bill_s3_key"):
-                s3_keys_to_delete.append(audit["bill_s3_key"])
-            if audit.get("policy_s3_key"):
-                s3_keys_to_delete.append(audit["policy_s3_key"])
-            
-            # No temp folder cleanup - we don't use temp folders anymore!
-            
-            if s3_keys_to_delete:
-                delete_multiple_files_from_s3(s3_keys_to_delete)
-                print(f"✅ Cleaned up S3 files for audit {audit_id}: {len(s3_keys_to_delete)} files deleted")
-        
-        except AWSServiceError as cleanup_error:
-            # Log cleanup error but don't fail the audit
-            print(f"⚠️ S3 cleanup failed for audit {audit_id}: {cleanup_error}")
-        
-        return {"message": "Audit completed successfully"}
-        
-    except Exception as e:
-        audit["status"] = AuditStatus.FAILED
-        audit["error"] = str(e)
-        
-        # Attempt cleanup even on failure
-        try:
-            s3_keys_to_delete = []
-            if audit.get("bill_s3_key"):
-                s3_keys_to_delete.append(audit["bill_s3_key"])
-            if audit.get("policy_s3_key"):
-                s3_keys_to_delete.append(audit["policy_s3_key"])
-            if s3_keys_to_delete:
-                delete_multiple_files_from_s3(s3_keys_to_delete)
-                print(f"🗑️ Cleaned up S3 after failure for audit {audit_id}")
-        except:
-            pass  # Ignore cleanup errors when audit already failed
-        
-        raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
+    # Schedule background task
+    background_tasks.add_task(
+        run_audit_background,
+        audit_id,
+        audit["bill_path"],
+        audit["policy_path"],
+        audit.get("bill_s3_key"),
+        audit.get("policy_s3_key")
+    )
+    
+    return {"message": "Audit processing started in background"}
 
